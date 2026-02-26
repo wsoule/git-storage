@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"unicode"
 )
 
 type Server struct {
@@ -60,6 +61,11 @@ func (s *Server) handleGit(w http.ResponseWriter, r *http.Request) {
 	repoName := parts[0]
 	repoPath := filepath.Join(s.repoRoot, repoName)
 
+	if !isValidRepoName(repoName) {
+    http.NotFound(w, r)
+    return
+}
+
 	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
 		log.Printf("creating bare repo at %s", repoPath)
 		if err := initBareRepo(repoPath); err != nil {
@@ -87,6 +93,19 @@ func (s *Server) handleGit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handler.ServeHTTP(w, r)
+}
+
+func isValidRepoName(name string) bool {
+    if !strings.HasSuffix(name, ".git") {
+        return false
+    }
+    // only allow alphanumeric, hyphens, underscores, dots
+    for _, c := range strings.TrimSuffix(name, ".git") {
+        if !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '-' && c != '_' && c != '.' {
+            return false
+        }
+    }
+    return true
 }
 
 func initBareRepo(path string) error {
