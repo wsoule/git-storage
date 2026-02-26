@@ -125,6 +125,3 @@ Open `http://localhost:8080/bench` to run benchmarks and view results.
   - Put/Get throughput
   - Latency under distribution charts
   - Storage efficiency (SQLite overhead vs raw key-value)
-
-  ---
-  tiny
