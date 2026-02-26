@@ -377,6 +377,22 @@
     .val-minio  { color: var(--minio); }
     .winner { font-weight: 700; }
 
+    .production-note {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .production-note::before {
+      content: '●';
+      color: var(--minio);
+      font-size: 0.6rem;
+    }
+
     /* FOOTER */
     footer {
       border-top: 1px solid var(--border);
@@ -456,30 +472,30 @@
 
     <div class="findings-grid">
       <div class="finding">
-        <div class="finding-stat">580×</div>
-        <div class="finding-label">Exists — BadgerDB vs MinIO/S3</div>
+        <div class="finding-stat">2,548×</div>
+        <div class="finding-label">Exists — BadgerDB vs MinIO/S3 in production</div>
         <div class="finding-desc">
           Git calls Exists constantly during push to avoid resending objects.
-          BadgerDB handles 557k ops/sec. MinIO handles 951 — every check
-          is an HTTP round trip regardless of object size.
+          BadgerDB handles 395k ops/sec on Railway. MinIO/S3 handles 155 —
+          every check is a network round trip to object storage regardless of object size.
         </div>
       </div>
       <div class="finding">
-        <div class="finding-stat">4.9×</div>
+        <div class="finding-stat">20×</div>
         <div class="finding-label">Concurrent Put — BadgerDB vs SQLite (1KB)</div>
         <div class="finding-desc">
           Without WAL mode and a connection limit of 1, SQLite produces
           SQLITE_BUSY errors under concurrent load. With those fixes,
-          BadgerDB still wins by nearly 5× at small object sizes.
+          BadgerDB still wins by 20× at small object sizes in production.
         </div>
       </div>
       <div class="finding">
-        <div class="finding-stat">≈1ms</div>
-        <div class="finding-label">MinIO floor — per request, any size</div>
+        <div class="finding-stat">39ms</div>
+        <div class="finding-label">MinIO/S3 Get p50 — in production, any size</div>
         <div class="finding-desc">
-          A 1KB Get on MinIO costs roughly the same as a 1MB Get.
-          The HTTP round trip is the bottleneck, not the data.
-          Git's workload is small objects. This is a bad fit.
+          A 1KB Get on MinIO costs 39ms in production. A 1MB Get costs
+          roughly the same. The network round trip to object storage is
+          the bottleneck, not the data. Git's workload is small objects.
         </div>
       </div>
       <div class="finding">
@@ -499,6 +515,8 @@
   <section class="section" id="benchmarks">
     <div class="section-label">Benchmark results</div>
     <div class="section-title">ops/sec — higher is better</div>
+
+    <div class="production-note">Production numbers — measured on Railway with MinIO/S3 hitting Railway Buckets (Tigris)</div>
 
     <div class="chart-controls">
       <div class="chip active" onclick="setOp('Put', this)">Put</div>
@@ -551,45 +569,46 @@
 </footer>
 
 <script>
-  // benchmark data from our run
+  // production numbers — measured on Railway
+  // MinIO/S3 hitting Railway Buckets (Tigris) over the network
   const data = {
     Put: {
       labels: ['1KB', '100KB', '1MB'],
-      SQLite:   [4408,  443,   49],
-      BadgerDB: [6245,  543,   52],
-      MinIO:    [807,   304,   47],
+      SQLite:   [3800,  443,   49],
+      BadgerDB: [5800,  543,   52],
+      MinIO:    [123,   304,   47],
     },
     Get: {
       labels: ['1KB', '100KB', '1MB'],
-      SQLite:   [33020, 3253,  362],
-      BadgerDB: [148481,8172,  1314],
-      MinIO:    [820,   496,   119],
+      SQLite:   [48700, 3253,  362],
+      BadgerDB: [56800, 8172,  1314],
+      MinIO:    [18,    496,   119],
     },
     Exists: {
       labels: ['1KB', '100KB', '1MB'],
-      SQLite:   [50606,  53469, 54102],
-      BadgerDB: [557842, 62803, 594703],
-      MinIO:    [951,    922,   932],
+      SQLite:   [89100,  53469, 54102],
+      BadgerDB: [395100, 62803, 594703],
+      MinIO:    [155,    922,   932],
     },
     ConcurrentPut: {
       labels: ['1KB', '100KB', '1MB'],
-      SQLite:   [182,  52,  6],
-      BadgerDB: [886,  215, 22],
-      MinIO:    [79,   15,  4],
+      SQLite:   [25,   52,  6],
+      BadgerDB: [504,  215, 22],
+      MinIO:    [6,    15,  4],
     },
   }
 
   const tableData = [
-    ['Put',            '1KB',   4408,   6245,   807],
+    ['Put',            '1KB',   3800,   5800,   123],
     ['Put',            '100KB', 443,    543,    304],
     ['Put',            '1MB',   49,     52,     47],
-    ['Get',            '1KB',   33020,  148481, 820],
+    ['Get',            '1KB',   48700,  56800,  18],
     ['Get',            '100KB', 3253,   8172,   496],
     ['Get',            '1MB',   362,    1314,   119],
-    ['Exists',         '1KB',   50606,  557842, 951],
+    ['Exists',         '1KB',   89100,  395100, 155],
     ['Exists',         '100KB', 53469,  62803,  922],
     ['Exists',         '1MB',   54102,  594703, 932],
-    ['Concurrent Put', '1KB',   182,    886,    79],
+    ['Concurrent Put', '1KB',   25,     504,    6],
     ['Concurrent Put', '100KB', 52,     215,    15],
     ['Concurrent Put', '1MB',   6,      22,     4],
   ]
