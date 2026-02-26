@@ -472,7 +472,7 @@
 
     <div class="findings-grid">
       <div class="finding">
-        <div class="finding-stat">2,548×</div>
+        <div class="finding-stat" id="stat-exists-ratio">2,548×</div>
         <div class="finding-label">Exists — BadgerDB vs MinIO/S3 in production</div>
         <div class="finding-desc">
           Git calls Exists constantly during push to avoid resending objects.
@@ -481,7 +481,7 @@
         </div>
       </div>
       <div class="finding">
-        <div class="finding-stat">20×</div>
+        <div class="finding-stat" id="stat-concurrent-ratio">20×</div>
         <div class="finding-label">Concurrent Put — BadgerDB vs SQLite (1KB)</div>
         <div class="finding-desc">
           Without WAL mode and a connection limit of 1, SQLite produces
@@ -490,7 +490,7 @@
         </div>
       </div>
       <div class="finding">
-        <div class="finding-stat">39ms</div>
+        <div class="finding-stat" id="stat-minio-latency">39ms</div>
         <div class="finding-label">MinIO/S3 Get p50 — in production, any size</div>
         <div class="finding-desc">
           A 1KB Get on MinIO costs 39ms in production. A 1MB Get costs
@@ -499,7 +499,7 @@
         </div>
       </div>
       <div class="finding">
-        <div class="finding-stat">~1×</div>
+        <div class="finding-stat" id="stat-large-convergence">~1×</div>
         <div class="finding-label">Large object Put — all backends converge</div>
         <div class="finding-desc">
           At 1MB, SQLite (49), BadgerDB (52), and MinIO (47) are within
@@ -516,8 +516,15 @@
     <div class="section-label">Benchmark results</div>
     <div class="section-title">ops/sec — higher is better</div>
 
-    <div class="production-note">Production numbers — measured on Railway with MinIO/S3 hitting Railway Buckets (Tigris)</div>
+    <div class="production-note" id="productionNote">Loading benchmark data...</div>
 
+    <div id="noDataNotice" style="display:none">
+      <p style="font-family:'Berkeley Mono',monospace;font-size:0.8rem;color:var(--muted);padding:2rem 0">
+        No benchmark runs yet. <a href="/bench" style="color:var(--accent);text-decoration:none">Run a live benchmark →</a>
+      </p>
+    </div>
+
+    <div id="benchContent">
     <div class="chart-controls">
       <div class="chip active" onclick="setOp('Put', this)">Put</div>
       <div class="chip" onclick="setOp('Get', this)">Get</div>
@@ -554,6 +561,7 @@
         <tbody id="resultsTable"></tbody>
       </table>
     </div>
+    </div> <!-- /benchContent -->
   </section>
 </div>
 
@@ -569,55 +577,65 @@
 </footer>
 
 <script>
-  // production numbers — measured on Railway
-  // MinIO/S3 hitting Railway Buckets (Tigris) over the network
-  const data = {
-    Put: {
-      labels: ['1KB', '100KB', '1MB'],
-      SQLite:   [3800,  443,   49],
-      BadgerDB: [5800,  543,   52],
-      MinIO:    [123,   304,   47],
-    },
-    Get: {
-      labels: ['1KB', '100KB', '1MB'],
-      SQLite:   [48700, 3253,  362],
-      BadgerDB: [56800, 8172,  1314],
-      MinIO:    [18,    496,   119],
-    },
-    Exists: {
-      labels: ['1KB', '100KB', '1MB'],
-      SQLite:   [89100,  53469, 54102],
-      BadgerDB: [395100, 62803, 594703],
-      MinIO:    [155,    922,   932],
-    },
-    ConcurrentPut: {
-      labels: ['1KB', '100KB', '1MB'],
-      SQLite:   [25,   52,  6],
-      BadgerDB: [504,  215, 22],
-      MinIO:    [6,    15,  4],
-    },
+  const BACKEND_COLORS = { SQLite: '#e05c4a', BadgerDB: '#4aa8e0', MinIO: '#4ae08a' }
+
+  function fmtRatio(ratio) {
+    const r = Math.round(ratio)
+    if (r >= 1000) return r.toLocaleString() + '×'
+    return r + '×'
   }
 
-  const tableData = [
-    ['Put',            '1KB',   3800,   5800,   123],
-    ['Put',            '100KB', 443,    543,    304],
-    ['Put',            '1MB',   49,     52,     47],
-    ['Get',            '1KB',   48700,  56800,  18],
-    ['Get',            '100KB', 3253,   8172,   496],
-    ['Get',            '1MB',   362,    1314,   119],
-    ['Exists',         '1KB',   89100,  395100, 155],
-    ['Exists',         '100KB', 53469,  62803,  922],
-    ['Exists',         '1MB',   54102,  594703, 932],
-    ['Concurrent Put', '1KB',   25,     504,    6],
-    ['Concurrent Put', '100KB', 52,     215,    15],
-    ['Concurrent Put', '1MB',   6,      22,     4],
-  ]
+  function fmtDur(ns) {
+    if (ns < 1000)  return Math.round(ns) + 'ns'
+    if (ns < 1e6)   return Math.round(ns / 1000) + 'µs'
+    if (ns < 1e9)   return Math.round(ns / 1e6) + 'ms'
+    return (ns / 1e9).toFixed(1) + 's'
+  }
 
+  function updateFindings(byName) {
+    const badger = byName['BadgerDB']
+    const minio  = byName['MinIO/S3']
+    const sqlite = byName['SQLite']
+
+    // BadgerDB Exists / MinIO Exists at 1KB (size index 0)
+    if (badger && minio) {
+      const ratio = badger.Results[0].Exists.OpsPerSec / minio.Results[0].Exists.OpsPerSec
+      document.getElementById('stat-exists-ratio').textContent = fmtRatio(ratio)
+    }
+
+    // BadgerDB ConcurrentPut / SQLite ConcurrentPut at 1KB
+    if (badger && sqlite) {
+      const ratio = badger.Results[0].ConcurrentPut.OpsPerSec / sqlite.Results[0].ConcurrentPut.OpsPerSec
+      document.getElementById('stat-concurrent-ratio').textContent = fmtRatio(ratio)
+    }
+
+    // MinIO/S3 Get p50 at 1KB — p50 is a Go time.Duration, serialized as nanoseconds
+    if (minio) {
+      document.getElementById('stat-minio-latency').textContent = fmtDur(minio.Results[0].Get.P50)
+    }
+
+    // Max/min Put ratio at 1MB (size index 2) — shows how much backends converge on large objects
+    if (badger && sqlite) {
+      const vals = [sqlite.Results[2].Put.OpsPerSec, badger.Results[2].Put.OpsPerSec]
+      if (minio) vals.push(minio.Results[2].Put.OpsPerSec)
+      const ratio = Math.max.apply(null, vals) / Math.min.apply(null, vals)
+      document.getElementById('stat-large-convergence').textContent = '~' + ratio.toFixed(1) + '×'
+    }
+  }
+
+  // "small (1KB)" → "1KB"
+  function shortSize(name) {
+    const m = name.match(/\(([^)]+)\)/)
+    return m ? m[1] : name
+  }
+
+  let chartData = {}
+  let tableRows = []
   let chart = null
 
   function fmt(n) {
-    if (n >= 1000) return (n/1000).toFixed(1) + 'k'
-    return n.toString()
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
+    return n.toFixed(0)
   }
 
   function setOp(op, el) {
@@ -627,47 +645,35 @@
   }
 
   function renderChart(op) {
-    const d = data[op]
+    const d = chartData[op]
+    if (!d) return
     if (chart) chart.destroy()
     const ctx = document.getElementById('mainChart').getContext('2d')
+    const datasets = Object.keys(BACKEND_COLORS)
+      .filter(k => d[k])
+      .map(k => ({
+        label: k === 'MinIO' ? 'MinIO/S3' : k,
+        data: d[k],
+        backgroundColor: BACKEND_COLORS[k],
+        borderRadius: 3,
+      }))
     chart = new Chart(ctx, {
       type: 'bar',
-      data: {
-        labels: d.labels,
-        datasets: [
-          { label: 'SQLite',   data: d.SQLite,   backgroundColor: '#e05c4a', borderRadius: 3 },
-          { label: 'BadgerDB', data: d.BadgerDB, backgroundColor: '#4aa8e0', borderRadius: 3 },
-          { label: 'MinIO/S3', data: d.MinIO,    backgroundColor: '#4ae08a', borderRadius: 3 },
-        ]
-      },
+      data: { labels: d.labels, datasets },
       options: {
         responsive: true,
         plugins: {
           legend: { display: false },
           tooltip: {
-            backgroundColor: '#0d1318',
-            borderColor: '#1a2330',
-            borderWidth: 1,
-            titleColor: '#c8dae8',
-            bodyColor: '#7a96b0',
-            titleFont: { family: 'Berkeley Mono' },
-            bodyFont: { family: 'Berkeley Mono' },
-            callbacks: {
-              label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)} ops/sec`
-            }
+            backgroundColor: '#0d1318', borderColor: '#1a2330', borderWidth: 1,
+            titleColor: '#c8dae8', bodyColor: '#7a96b0',
+            titleFont: { family: 'Berkeley Mono' }, bodyFont: { family: 'Berkeley Mono' },
+            callbacks: { label: c => ' ' + c.dataset.label + ': ' + fmt(c.raw) + ' ops/sec' }
           }
         },
         scales: {
-          x: {
-            ticks: { color: '#7a96b0', font: { family: 'Berkeley Mono', size: 11 } },
-            grid: { color: '#1a2330' }
-          },
-          y: {
-            ticks: { color: '#7a96b0', font: { family: 'Berkeley Mono', size: 11 },
-              callback: v => fmt(v)
-            },
-            grid: { color: '#1a2330' }
-          }
+          x: { ticks: { color: '#7a96b0', font: { family: 'Berkeley Mono', size: 11 } }, grid: { color: '#1a2330' } },
+          y: { ticks: { color: '#7a96b0', font: { family: 'Berkeley Mono', size: 11 }, callback: v => fmt(v) }, grid: { color: '#1a2330' } }
         }
       }
     })
@@ -675,28 +681,105 @@
 
   function buildTable() {
     const tbody = document.getElementById('resultsTable')
-    tableData.forEach(([op, size, sq, bg, mn]) => {
-      const max = Math.max(sq, bg, mn)
+    tbody.textContent = ''
+    tableRows.forEach(function(row) {
+      const op = row[0], size = row[1], sq = row[2], bg = row[3], mn = row[4]
+      const vals = [sq, bg, mn].filter(function(v) { return v !== null })
+      const max = vals.length ? Math.max.apply(null, vals) : 0
+
+      function valCell(v, cls) {
+        const td = document.createElement('td')
+        td.className = cls
+        if (v === null) {
+          td.textContent = '—'
+          td.style.color = 'var(--muted)'
+        } else {
+          if (v === max) td.className = cls + ' winner'
+          td.textContent = fmt(v)
+        }
+        return td
+      }
+
       const tr = document.createElement('tr')
-      tr.innerHTML = `
-        <td class="op-name">${op}</td>
-        <td style="color:var(--muted)">${size}</td>
-        <td class="val-sqlite ${sq===max?'winner':''}">${fmt(sq)}</td>
-        <td class="val-badger ${bg===max?'winner':''}">${fmt(bg)}</td>
-        <td class="val-minio  ${mn===max?'winner':''}">${fmt(mn)}</td>
-      `
+      const tdOp = document.createElement('td'); tdOp.className = 'op-name'; tdOp.textContent = op
+      const tdSz = document.createElement('td'); tdSz.style.color = 'var(--muted)'; tdSz.textContent = size
+      tr.appendChild(tdOp)
+      tr.appendChild(tdSz)
+      tr.appendChild(valCell(sq, 'val-sqlite'))
+      tr.appendChild(valCell(bg, 'val-badger'))
+      tr.appendChild(valCell(mn, 'val-minio'))
       tbody.appendChild(tr)
     })
+  }
+
+  function buildDataFromRun(run) {
+    const backends = run.Backends
+    if (!backends || backends.length === 0) return false
+
+    const byName = {}
+    backends.forEach(function(b) { byName[b.Backend] = b })
+
+    const ops = ['Put', 'Get', 'Exists', 'ConcurrentPut']
+    const opLabels = { Put: 'Put', Get: 'Get', Exists: 'Exists', ConcurrentPut: 'Concurrent Put' }
+    const labels = backends[0].Results.map(function(r) { return shortSize(r.Size.Name) })
+
+    chartData = {}
+    ops.forEach(function(op) {
+      chartData[op] = { labels: labels }
+      backends.forEach(function(b) {
+        const key = b.Backend === 'MinIO/S3' ? 'MinIO' : b.Backend
+        chartData[op][key] = b.Results.map(function(r) { return r[op].OpsPerSec })
+      })
+    })
+
+    tableRows = []
+    ops.forEach(function(op) {
+      labels.forEach(function(sizeLabel, i) {
+        const sq = byName['SQLite']   ? byName['SQLite'].Results[i][op].OpsPerSec   : null
+        const bg = byName['BadgerDB'] ? byName['BadgerDB'].Results[i][op].OpsPerSec : null
+        const mn = byName['MinIO/S3'] ? byName['MinIO/S3'].Results[i][op].OpsPerSec : null
+        tableRows.push([opLabels[op], sizeLabel, sq, bg, mn])
+      })
+    })
+
+    updateFindings(byName)
+    return true
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch('/bench/history')
+      const runs = await res.json()
+      const note = document.getElementById('productionNote')
+
+      if (!runs || runs.length === 0) {
+        note.textContent = 'No benchmark data yet.'
+        document.getElementById('noDataNotice').style.display = 'block'
+        document.getElementById('benchContent').style.display = 'none'
+        return
+      }
+
+      const run = runs[runs.length - 1]
+      if (buildDataFromRun(run)) {
+        note.textContent = 'Most recent run — ' + new Date(run.Timestamp).toLocaleString()
+        document.getElementById('noDataNotice').style.display = 'none'
+        document.getElementById('benchContent').style.display = 'block'
+        renderChart('Put')
+        buildTable()
+      }
+    } catch (e) {
+      document.getElementById('productionNote').textContent = 'Failed to load benchmark data.'
+      console.error('Failed to load history', e)
+    }
   }
 
   function copy(btn) {
     navigator.clipboard.writeText('git clone https://git.wyat.me/git-storage.git')
     btn.textContent = 'copied'
-    setTimeout(() => btn.textContent = 'copy', 2000)
+    setTimeout(function() { btn.textContent = 'copy' }, 2000)
   }
 
-  renderChart('Put')
-  buildTable()
+  loadHistory()
 </script>
 </body>
 </html>
