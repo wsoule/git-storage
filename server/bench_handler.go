@@ -60,18 +60,33 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 	defer badgerStore.Close()
 	run.Backends = append(run.Backends, bench.RunBackend("BadgerDB", badgerStore))
 
-	// MinIO — optional, skip if not configured
 	minioEndpoint := os.Getenv("MINIO_ENDPOINT")
+	if minioEndpoint == "" {
+		minioEndpoint = os.Getenv("ENDPOINT")
+	}
+	accessKey := os.Getenv("MINIO_ACCESS_KEY")
+	if accessKey == "" {
+		accessKey = os.Getenv("ACCESS_KEY_ID")
+	}
+	secretKey := os.Getenv("MINIO_SECRET_KEY")
+	if secretKey == "" {
+		secretKey = os.Getenv("SECRET_ACCESS_KEY")
+	}
+	bucket := os.Getenv("MINIO_BUCKET")
+	if bucket == "" {
+		bucket = os.Getenv("BUCKET")
+	}
+
 	if minioEndpoint != "" {
 		minioStore, err := ministore.New(
 			minioEndpoint,
-			os.Getenv("MINIO_ACCESS_KEY"),
-			os.Getenv("MINIO_SECRET_KEY"),
-			"bench-git-objects",
-			false,
+			accessKey,
+			secretKey,
+			bucket,
+			true, // Railway buckets use SSL
 		)
 		if err == nil {
-			run.Backends = append(run.Backends, bench.RunBackend("MinIO", minioStore))
+			run.Backends = append(run.Backends, bench.RunBackend("MinIO/S3", minioStore))
 		}
 	}
 
