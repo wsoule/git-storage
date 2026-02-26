@@ -3,10 +3,10 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,8 +66,9 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 		minioEndpoint = os.Getenv("ENDPOINT")
 	}
 
-	log.Printf("minio endpoint: %q", minioEndpoint)
-	log.Printf("bucket: %q", os.Getenv("BUCKET"))
+	// Railway bucket endpoint includes https:// prefix, strip it
+	minioEndpoint = strings.TrimPrefix(minioEndpoint, "https://")
+	minioEndpoint = strings.TrimPrefix(minioEndpoint, "http://")
 
 	accessKey := os.Getenv("MINIO_ACCESS_KEY")
 	if accessKey == "" {
