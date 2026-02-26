@@ -3,210 +3,495 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Git Storage Benchmarks</title>
+  <title>git-storage — live benchmarks</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Berkeley+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
+    :root {
+      --bg:      #080c10;
+      --surface: #0d1318;
+      --border:  #1a2330;
+      --muted:   #3d5166;
+      --dim:     #7a96b0;
+      --text:    #c8dae8;
+      --bright:  #e8f4ff;
+      --sqlite:  #e05c4a;
+      --badger:  #4aa8e0;
+      --minio:   #4ae08a;
+      --accent:  #4aa8e0;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace;
-      background: #0d1117;
-      color: #e6edf3;
-      padding: 2rem;
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 48px 48px;
+      opacity: 0.35;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    /* NAV */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8, 12, 16, 0.85);
+      backdrop-filter: blur(12px);
+    }
+
+    nav .wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+    }
+
+    .nav-logo {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--bright);
+      letter-spacing: 0.05em;
+      text-decoration: none;
+    }
+
+    .nav-logo span { color: var(--accent); }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-size: 0.8rem;
+      color: var(--dim);
+      text-decoration: none;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--bright); }
+
+    /* HEADER */
+    .header {
+      padding: 4rem 0 3rem;
+    }
+
+    .header-label {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .header-label::before {
+      content: '';
+      display: block;
+      width: 24px;
+      height: 1px;
+      background: var(--accent);
     }
 
     h1 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin-bottom: 0.25rem;
-      color: #f0f6fc;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 700;
+      color: var(--bright);
+      margin-bottom: 0.75rem;
+      letter-spacing: -0.02em;
     }
 
-    .subtitle {
-      color: #8b949e;
-      font-size: 0.875rem;
+    .header-sub {
+      font-size: 0.9rem;
+      color: var(--dim);
+      font-weight: 300;
       margin-bottom: 2rem;
     }
 
     .run-btn {
-      background: #238636;
-      color: #fff;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+      padding: 0.65rem 1.5rem;
+      border-radius: 4px;
       border: none;
-      padding: 0.6rem 1.4rem;
-      border-radius: 6px;
-      font-size: 0.9rem;
+      background: var(--accent);
+      color: var(--bg);
+      font-weight: 700;
       cursor: pointer;
-      margin-bottom: 2rem;
-      transition: background 0.2s;
+      transition: background 0.15s;
     }
 
-    .run-btn:hover { background: #2ea043; }
-    .run-btn:disabled { background: #21262d; color: #8b949e; cursor: not-allowed; }
+    .run-btn:hover { background: #6bbde8; }
+    .run-btn:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
 
     .status {
-      font-size: 0.85rem;
-      color: #8b949e;
-      margin-bottom: 2rem;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 1rem;
       min-height: 1.2rem;
     }
 
-    .section-title {
-      font-size: 1rem;
-      font-weight: 600;
-      color: #f0f6fc;
-      margin: 2rem 0 1rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid #21262d;
+    .status.running { color: var(--accent); }
+    .status.done    { color: var(--minio); }
+    .status.error   { color: var(--sqlite); }
+
+    /* SECTIONS */
+    .section {
+      padding: 3rem 0;
+      border-top: 1px solid var(--border);
     }
 
-    .size-tabs {
+    .section-label {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+
+    .section-title {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 1.1rem;
+      color: var(--bright);
+      margin-bottom: 1.5rem;
+      font-weight: 700;
+    }
+
+    /* SIZE TABS */
+    .tabs {
       display: flex;
       gap: 0.5rem;
       margin-bottom: 1.5rem;
+      flex-wrap: wrap;
     }
 
     .tab {
-      padding: 0.4rem 1rem;
-      border-radius: 6px;
-      border: 1px solid #30363d;
-      background: #161b22;
-      color: #8b949e;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.75rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--dim);
       cursor: pointer;
-      font-size: 0.85rem;
       transition: all 0.15s;
+      letter-spacing: 0.03em;
     }
 
     .tab.active {
-      background: #1f6feb;
-      border-color: #1f6feb;
-      color: #fff;
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(74, 168, 224, 0.08);
     }
 
+    /* OP CHIPS */
+    .op-chips {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.75rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--dim);
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.03em;
+    }
+
+    .chip.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(74, 168, 224, 0.08);
+    }
+
+    /* CHARTS */
     .charts-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-      gap: 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
       margin-bottom: 2rem;
     }
 
     .chart-card {
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      padding: 1.25rem;
+      background: var(--surface);
+      padding: 1.5rem;
     }
 
     .chart-card h3 {
-      font-size: 0.85rem;
-      color: #8b949e;
-      margin-bottom: 1rem;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.1em;
+      margin-bottom: 1rem;
     }
 
-    .chart-card canvas {
-      max-height: 220px;
+    .chart-card canvas { max-height: 200px; }
+
+    /* LATENCY TABLE */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.85rem;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.8rem;
     }
 
     th {
+      padding: 0.75rem 1.25rem;
       text-align: left;
-      padding: 0.6rem 1rem;
-      color: #8b949e;
-      border-bottom: 1px solid #21262d;
-      font-weight: 500;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.7rem;
     }
 
     td {
-      padding: 0.6rem 1rem;
-      border-bottom: 1px solid #161b22;
+      padding: 0.65rem 1.25rem;
+      border-bottom: 1px solid rgba(26,35,48,0.5);
+      color: var(--text);
       font-variant-numeric: tabular-nums;
     }
 
-    tr:hover td { background: #161b22; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.015); }
 
-    .backend-sqlite { color: #f78166; }
-    .backend-badger { color: #79c0ff; }
-    .backend-minio  { color: #56d364; }
+    .val-sqlite { color: var(--sqlite); }
+    .val-badger { color: var(--badger); }
+    .val-minio  { color: var(--minio); }
+
+    /* HISTORY */
+    .history-list { display: flex; flex-direction: column; gap: 0.5rem; }
 
     .history-item {
-      background: #161b22;
-      border: 1px solid #30363d;
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 0.75rem 1rem;
-      margin-bottom: 0.5rem;
+      padding: 0.75rem 1.25rem;
       cursor: pointer;
-      font-size: 0.85rem;
-      color: #8b949e;
-      transition: border-color 0.15s;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--dim);
+      transition: border-color 0.15s, color 0.15s;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
-    .history-item:hover { border-color: #58a6ff; color: #e6edf3; }
-    .history-item.active { border-color: #1f6feb; color: #e6edf3; }
+    .history-item:hover { border-color: var(--muted); color: var(--text); }
+    .history-item.active { border-color: var(--accent); color: var(--text); }
 
-    .empty { color: #8b949e; font-size: 0.85rem; padding: 1rem 0; }
+    .history-backends {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .history-tag {
+      font-size: 0.65rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 2px;
+      background: var(--border);
+      color: var(--muted);
+    }
+
+    .empty {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--muted);
+      padding: 1rem 0;
+    }
+
+    /* LEGEND */
+    .legend {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--dim);
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .header > * {
+      animation: fadeUp 0.4s ease both;
+    }
+
+    .header-label { animation-delay: 0.05s; }
+    h1            { animation-delay: 0.1s; }
+    .header-sub   { animation-delay: 0.15s; }
+    .run-btn      { animation-delay: 0.2s; }
   </style>
 </head>
 <body>
 
-<h1>Git Storage Benchmarks</h1>
-<p class="subtitle">Comparing SQLite, BadgerDB, and MinIO as git object stores</p>
-
-<button class="run-btn" id="runBtn" onclick="runBenchmark()">Run Benchmarks</button>
-<div class="status" id="status"></div>
-
-<div id="results" style="display:none">
-  <div class="section-title">Results</div>
-
-  <div class="size-tabs" id="sizeTabs"></div>
-
-  <div class="charts-grid">
-    <div class="chart-card">
-      <h3>Put — ops/sec (higher is better)</h3>
-      <canvas id="chartPut"></canvas>
-    </div>
-    <div class="chart-card">
-      <h3>Get — ops/sec (higher is better)</h3>
-      <canvas id="chartGet"></canvas>
-    </div>
-    <div class="chart-card">
-      <h3>Exists — ops/sec (higher is better)</h3>
-      <canvas id="chartExists"></canvas>
-    </div>
-    <div class="chart-card">
-      <h3>Concurrent Put — ops/sec (higher is better)</h3>
-      <canvas id="chartConcurrent"></canvas>
-    </div>
+<nav>
+  <div class="wrap">
+    <a class="nav-logo" href="/">git<span>-</span>storage</a>
+    <ul class="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="/#findings">Findings</a></li>
+      <li><a href="https://github.com/wsoule/git-storage">GitHub</a></li>
+    </ul>
   </div>
+</nav>
 
-  <div class="section-title">Latency Table (p50 / p99)</div>
-  <table id="latencyTable">
-    <thead>
-      <tr>
-        <th>Backend</th>
-        <th>Operation</th>
-        <th>p50</th>
-        <th>p99</th>
-        <th>ops/sec</th>
-      </tr>
-    </thead>
-    <tbody id="latencyBody"></tbody>
-  </table>
+<div class="wrap">
+  <div class="header">
+    <div class="header-label">Live benchmark runner</div>
+    <h1>Run the benchmarks yourself.</h1>
+    <p class="header-sub">Spins up all three backends and measures Put, Get, Exists, and concurrent Put across three object sizes.</p>
+    <button class="run-btn" id="runBtn" onclick="runBenchmark()">Run Benchmarks</button>
+    <div class="status" id="status"></div>
+  </div>
 </div>
 
-<div class="section-title">History</div>
-<div id="historyList"><p class="empty">No runs yet.</p></div>
+<div id="results" style="display:none">
+  <div class="wrap">
+    <section class="section">
+      <div class="section-label">Results by size</div>
+      <div class="section-title">ops/sec — higher is better</div>
+
+      <div class="tabs" id="sizeTabs"></div>
+
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Put</h3>
+          <canvas id="chartPut"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Get</h3>
+          <canvas id="chartGet"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Exists</h3>
+          <canvas id="chartExists"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Concurrent Put</h3>
+          <canvas id="chartConcurrent"></canvas>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--sqlite)"></div>SQLite
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--badger)"></div>BadgerDB
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--minio)"></div>MinIO/S3
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-label">Latency</div>
+      <div class="section-title">p50 / p99 — lower is better</div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Backend</th>
+              <th>Operation</th>
+              <th>p50</th>
+              <th>p99</th>
+              <th>ops/sec</th>
+            </tr>
+          </thead>
+          <tbody id="latencyBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="wrap">
+  <section class="section">
+    <div class="section-label">History</div>
+    <div class="section-title">Past runs</div>
+    <div class="history-list" id="historyList">
+      <p class="empty">No runs yet.</p>
+    </div>
+  </section>
+</div>
 
 <script>
   const COLORS = {
-    SQLite:   '#f78166',
-    BadgerDB: '#79c0ff',
-    MinIO:    '#56d364',
+    SQLite:   '#e05c4a',
+    BadgerDB: '#4aa8e0',
+    MinIO:    '#4ae08a',
+    'MinIO/S3': '#4ae08a',
   }
 
   let charts = {}
@@ -215,9 +500,9 @@
   let allRuns = []
 
   function fmt(ns) {
-    if (ns < 1000) return ns.toFixed(0) + 'ns'
-    if (ns < 1e6)  return (ns / 1000).toFixed(1) + 'µs'
-    if (ns < 1e9)  return (ns / 1e6).toFixed(1) + 'ms'
+    if (ns < 1000)  return ns.toFixed(0) + 'ns'
+    if (ns < 1e6)   return (ns / 1000).toFixed(1) + 'µs'
+    if (ns < 1e9)   return (ns / 1e6).toFixed(1) + 'ms'
     return (ns / 1e9).toFixed(2) + 's'
   }
 
@@ -226,24 +511,52 @@
     return ops.toFixed(1)
   }
 
-  function backendClass(name) {
-    return 'backend-' + name.toLowerCase().replace('db', '')
+  const chartOpts = {
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0d1318',
+        borderColor: '#1a2330',
+        borderWidth: 1,
+        titleColor: '#c8dae8',
+        bodyColor: '#7a96b0',
+        titleFont: { family: 'Berkeley Mono' },
+        bodyFont: { family: 'Berkeley Mono' },
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: ${fmtOps(ctx.raw)} ops/sec`
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#7a96b0', font: { family: 'Berkeley Mono', size: 10 } },
+        grid: { color: '#1a2330' }
+      },
+      y: {
+        ticks: { color: '#7a96b0', font: { family: 'Berkeley Mono', size: 10 },
+          callback: v => fmtOps(v)
+        },
+        grid: { color: '#1a2330' }
+      }
+    }
   }
 
-  function makeChart(id, labels, datasets) {
+  function makeChart(id, labels, backends) {
     if (charts[id]) charts[id].destroy()
     const ctx = document.getElementById(id).getContext('2d')
     charts[id] = new Chart(ctx, {
       type: 'bar',
-      data: { labels, datasets },
-      options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } },
-          y: { ticks: { color: '#8b949e' }, grid: { color: '#21262d' } }
-        }
-      }
+      data: {
+        labels,
+        datasets: backends.map(b => ({
+          label: b.name,
+          data: b.data,
+          backgroundColor: COLORS[b.name] || '#8b949e',
+          borderRadius: 3,
+        }))
+      },
+      options: chartOpts
     })
   }
 
@@ -251,10 +564,12 @@
     currentRun = run
     currentSizeIdx = sizeIdx
 
+    const backends = run.Backends
+    const sizes = backends[0].Results.map(r => r.Size.Name)
+
     // size tabs
     const tabsEl = document.getElementById('sizeTabs')
     tabsEl.innerHTML = ''
-    const sizes = run.Backends[0].Results.map(r => r.Size.Name)
     sizes.forEach((name, i) => {
       const tab = document.createElement('div')
       tab.className = 'tab' + (i === sizeIdx ? ' active' : '')
@@ -263,41 +578,33 @@
       tabsEl.appendChild(tab)
     })
 
-    const backends = run.Backends
-    const labels = backends.map(b => b.Backend)
-
-    function dataset(op) {
-      return backends.map(b => {
-        const r = b.Results[sizeIdx]
-        return r ? r[op].OpsPerSec : 0
-      })
+    function chartData(op) {
+      return backends.map(b => ({
+        name: b.Backend,
+        data: [b.Results[sizeIdx][op].OpsPerSec]
+      }))
     }
 
-    function ds(op) {
-      return [{
-        data: dataset(op),
-        backgroundColor: labels.map(l => COLORS[l] || '#8b949e'),
-        borderRadius: 4,
-      }]
-    }
-
-    makeChart('chartPut',        labels, ds('Put'))
-    makeChart('chartGet',        labels, ds('Get'))
-    makeChart('chartExists',     labels, ds('Exists'))
-    makeChart('chartConcurrent', labels, ds('ConcurrentPut'))
+    const labels = ['']
+    makeChart('chartPut',        labels, chartData('Put'))
+    makeChart('chartGet',        labels, chartData('Get'))
+    makeChart('chartExists',     labels, chartData('Exists'))
+    makeChart('chartConcurrent', labels, chartData('ConcurrentPut'))
 
     // latency table
     const tbody = document.getElementById('latencyBody')
     tbody.innerHTML = ''
     const ops = ['Put', 'Get', 'Exists', 'ConcurrentPut']
+    const opLabels = { Put: 'Put', Get: 'Get', Exists: 'Exists', ConcurrentPut: 'Concurrent Put' }
+
     backends.forEach(b => {
       const r = b.Results[sizeIdx]
-      if (!r) return
+      const colorClass = 'val-' + b.Backend.toLowerCase().replace('db','').replace('/s3','').replace('minio','minio')
       ops.forEach((op, i) => {
         const row = document.createElement('tr')
         row.innerHTML = `
-          <td class="${backendClass(b.Backend)}">${i === 0 ? b.Backend : ''}</td>
-          <td>${op}</td>
+          <td class="${colorClass}">${i === 0 ? b.Backend : ''}</td>
+          <td style="color:var(--dim)">${opLabels[op]}</td>
           <td>${fmt(r[op].P50)}</td>
           <td>${fmt(r[op].P99)}</td>
           <td>${fmtOps(r[op].OpsPerSec)}</td>
@@ -318,36 +625,49 @@
     el.innerHTML = ''
     allRuns.slice().reverse().forEach((run, i) => {
       const div = document.createElement('div')
-      div.className = 'history-item' + (i === 0 && currentRun === run ? ' active' : '')
-      div.textContent = new Date(run.Timestamp).toLocaleString() +
-        ' — ' + run.Backends.map(b => b.Backend).join(', ')
-      div.onclick = () => renderRun(run, currentSizeIdx)
+      const isActive = run === currentRun
+      div.className = 'history-item' + (isActive ? ' active' : '')
+
+      const tags = run.Backends.map(b =>
+        `<span class="history-tag">${b.Backend}</span>`
+      ).join('')
+
+      div.innerHTML = `
+        <span>${new Date(run.Timestamp).toLocaleString()}</span>
+        <div class="history-backends">${tags}</div>
+      `
+      div.onclick = () => {
+        renderRun(run, currentSizeIdx)
+        renderHistory()
+      }
       el.appendChild(div)
     })
   }
 
   async function runBenchmark() {
     const btn = document.getElementById('runBtn')
-    const status = document.getElementById('status')
+    const statusEl = document.getElementById('status')
     btn.disabled = true
-    status.textContent = 'Running benchmarks… this takes ~30 seconds'
+    statusEl.className = 'status running'
+    statusEl.textContent = 'Running benchmarks — this takes ~30 seconds...'
 
     try {
       const res = await fetch('/bench/run', { method: 'POST' })
-      if (!res.ok) throw new Error('server error: ' + res.status)
+      if (!res.ok) throw new Error('server returned ' + res.status)
       const run = await res.json()
       allRuns.push(run)
       renderRun(run, 0)
       renderHistory()
-      status.textContent = 'Done — ' + new Date(run.Timestamp).toLocaleString()
+      statusEl.className = 'status done'
+      statusEl.textContent = 'Done — ' + new Date(run.Timestamp).toLocaleString()
     } catch (e) {
-      status.textContent = 'Error: ' + e.message
+      statusEl.className = 'status error'
+      statusEl.textContent = 'Error: ' + e.message
     } finally {
       btn.disabled = false
     }
   }
 
-  // load history on page load
   async function loadHistory() {
     try {
       const res = await fetch('/bench/history')
