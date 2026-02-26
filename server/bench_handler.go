@@ -112,6 +112,7 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 			true, // Railway buckets use SSL
 		)
 		if err == nil {
+			defer minioStore.Flush()
 			sendEvent("progress", map[string]string{"backend": "MinIO/S3", "status": "running"})
 			result = bench.RunBackend("MinIO/S3", minioStore)
 			run.Backends = append(run.Backends, result)

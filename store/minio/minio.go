@@ -105,3 +105,28 @@ func (s *MinioStore) Exists(sha string) (bool, error) {
     return true, nil
 }
 
+// Flush removes all objects from the bucket. Used after benchmarks to avoid
+// leaving test data in the bucket.
+func (s *MinioStore) Flush() error {
+    ctx := context.Background()
+
+    objectsCh := make(chan minio.ObjectInfo)
+    go func() {
+        defer close(objectsCh)
+        for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{}) {
+            if obj.Err != nil {
+                return
+            }
+            objectsCh <- obj
+        }
+    }()
+
+    for result := range s.client.RemoveObjects(ctx, s.bucket, objectsCh, minio.RemoveObjectsOptions{}) {
+        if result.Err != nil {
+            return fmt.Errorf("remove object %s: %w", result.ObjectName, result.Err)
+        }
+    }
+
+    return nil
+}
+
