@@ -476,7 +476,7 @@
         <div class="finding-label">Exists — BadgerDB vs MinIO/S3 in production</div>
         <div class="finding-desc">
           Git calls Exists constantly during push to avoid resending objects.
-          BadgerDB handles 395k ops/sec on Railway. MinIO/S3 handles 155 —
+          BadgerDB handles <span id="desc-badger-exists">395k</span> ops/sec on Railway. MinIO/S3 handles <span id="desc-minio-exists">155</span> —
           every check is a network round trip to object storage regardless of object size.
         </div>
       </div>
@@ -486,14 +486,14 @@
         <div class="finding-desc">
           Without WAL mode and a connection limit of 1, SQLite produces
           SQLITE_BUSY errors under concurrent load. With those fixes,
-          BadgerDB still wins by 20× at small object sizes in production.
+          BadgerDB still wins by <span id="desc-concurrent-ratio">20×</span> at small object sizes in production.
         </div>
       </div>
       <div class="finding">
         <div class="finding-stat" id="stat-minio-latency">39ms</div>
         <div class="finding-label">MinIO/S3 Get p50 — in production, any size</div>
         <div class="finding-desc">
-          A 1KB Get on MinIO costs 39ms in production. A 1MB Get costs
+          A 1KB Get on MinIO costs <span id="desc-minio-latency">39ms</span> in production. A 1MB Get costs
           roughly the same. The network round trip to object storage is
           the bottleneck, not the data. Git's workload is small objects.
         </div>
@@ -502,7 +502,7 @@
         <div class="finding-stat" id="stat-large-convergence">~1×</div>
         <div class="finding-label">Large object Put — all backends converge</div>
         <div class="finding-desc">
-          At 1MB, SQLite (49), BadgerDB (52), and MinIO (47) are within
+          At 1MB, SQLite (<span id="desc-sqlite-1mb">49</span>), BadgerDB (<span id="desc-badger-1mb">52</span>), and MinIO (<span id="desc-minio-1mb">47</span>) are within
           noise of each other. The bottleneck becomes I/O, not the
           storage layer. Backend choice matters most at small sizes.
         </div>
@@ -601,17 +601,22 @@
     if (badger && minio) {
       const ratio = badger.Results[0].Exists.OpsPerSec / minio.Results[0].Exists.OpsPerSec
       document.getElementById('stat-exists-ratio').textContent = fmtRatio(ratio)
+      document.getElementById('desc-badger-exists').textContent = fmt(badger.Results[0].Exists.OpsPerSec)
+      document.getElementById('desc-minio-exists').textContent = fmt(minio.Results[0].Exists.OpsPerSec)
     }
 
     // BadgerDB ConcurrentPut / SQLite ConcurrentPut at 1KB
     if (badger && sqlite) {
       const ratio = badger.Results[0].ConcurrentPut.OpsPerSec / sqlite.Results[0].ConcurrentPut.OpsPerSec
       document.getElementById('stat-concurrent-ratio').textContent = fmtRatio(ratio)
+      document.getElementById('desc-concurrent-ratio').textContent = fmtRatio(ratio)
     }
 
     // MinIO/S3 Get p50 at 1KB — p50 is a Go time.Duration, serialized as nanoseconds
     if (minio) {
-      document.getElementById('stat-minio-latency').textContent = fmtDur(minio.Results[0].Get.P50)
+      const latency = fmtDur(minio.Results[0].Get.P50)
+      document.getElementById('stat-minio-latency').textContent = latency
+      document.getElementById('desc-minio-latency').textContent = latency
     }
 
     // Max/min Put ratio at 1MB (size index 2) — shows how much backends converge on large objects
@@ -620,6 +625,9 @@
       if (minio) vals.push(minio.Results[2].Put.OpsPerSec)
       const ratio = Math.max.apply(null, vals) / Math.min.apply(null, vals)
       document.getElementById('stat-large-convergence').textContent = '~' + ratio.toFixed(1) + '×'
+      document.getElementById('desc-sqlite-1mb').textContent = fmt(sqlite.Results[2].Put.OpsPerSec)
+      document.getElementById('desc-badger-1mb').textContent = fmt(badger.Results[2].Put.OpsPerSec)
+      if (minio) document.getElementById('desc-minio-1mb').textContent = fmt(minio.Results[2].Put.OpsPerSec)
     }
   }
 

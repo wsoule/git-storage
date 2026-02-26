@@ -120,7 +120,7 @@ Open `http://localhost:8080/bench` to run benchmarks and view results.
   - Blocked on removing local disk dependency
 
 ### Benchmarks
-- [ ] Write benchmark suite comparing all three backends
+- [x] Write benchmark suite comparing all three backends
   - Put/Get throughput
   - Latency under distribution charts
   - Storage efficiency (SQLite overhead vs raw key-value)
