@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -40,7 +41,11 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 
 	sendEvent := func(event string, data any) {
-		b, _ := json.Marshal(data)
+		b, err := json.Marshal(data)
+		if err != nil {
+			log.Printf("marshal event %s: %v", event, err)
+			return
+		}
 		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b)
 		flusher.Flush()
 	}
@@ -111,7 +116,9 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 			bucket,
 			true, // Railway buckets use SSL
 		)
-		if err == nil {
+		if err != nil {
+			log.Printf("minio init failed (skipping): %v", err)
+		} else {
 			defer minioStore.Flush()
 			sendEvent("progress", map[string]string{"backend": "MinIO/S3", "status": "running"})
 			result = bench.RunBackend("MinIO/S3", minioStore)

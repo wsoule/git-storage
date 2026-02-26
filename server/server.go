@@ -28,26 +28,26 @@ func New(repoRoot string) (*Server, error) {
 }
 
 func (s *Server) Handler() http.Handler {
-    mux := http.NewServeMux()
-    mux.HandleFunc("/bench/run", s.handleBenchRun)
-    mux.HandleFunc("/bench/history", s.handleBenchHistory)
-    mux.HandleFunc("/bench", s.handleBenchUI)
-    mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
-    mux.HandleFunc("/", s.handleRoot)
-    return mux
+	mux := http.NewServeMux()
+	mux.HandleFunc("/bench/run", s.handleBenchRun)
+	mux.HandleFunc("/bench/history", s.handleBenchHistory)
+	mux.HandleFunc("/bench", s.handleBenchUI)
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	mux.HandleFunc("/", s.handleRoot)
+	return mux
 }
 
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
-    if r.URL.Path == "/" {
-        http.ServeFile(w, r, filepath.Join("static", "index.html"))
-        return
-    }
-    // everything else falls through to git
-    if !strings.Contains(r.URL.Path, ".git") {
-        http.NotFound(w, r)
-        return
-    }
-    s.handleGit(w, r)
+	if r.URL.Path == "/" {
+		http.ServeFile(w, r, filepath.Join("static", "index.html"))
+		return
+	}
+	// everything else falls through to git
+	if !strings.Contains(r.URL.Path, ".git") {
+		http.NotFound(w, r)
+		return
+	}
+	s.handleGit(w, r)
 }
 
 func (s *Server) handleGit(w http.ResponseWriter, r *http.Request) {
@@ -62,9 +62,9 @@ func (s *Server) handleGit(w http.ResponseWriter, r *http.Request) {
 	repoPath := filepath.Join(s.repoRoot, repoName)
 
 	if !isValidRepoName(repoName) {
-    http.NotFound(w, r)
-    return
-}
+		http.NotFound(w, r)
+		return
+	}
 
 	if _, err := os.Stat(repoPath); os.IsNotExist(err) {
 		log.Printf("creating bare repo at %s", repoPath)
@@ -88,7 +88,7 @@ func (s *Server) handleGit(w http.ResponseWriter, r *http.Request) {
 		Env: []string{
 			"GIT_PROJECT_ROOT=" + s.repoRoot,
 			"GIT_HTTP_EXPORT_ALL=1",
-			},
+		},
 		InheritEnv: []string{"PATH", "HOME", "USER"},
 	}
 
@@ -96,16 +96,16 @@ func (s *Server) handleGit(w http.ResponseWriter, r *http.Request) {
 }
 
 func isValidRepoName(name string) bool {
-    if !strings.HasSuffix(name, ".git") {
-        return false
-    }
-    // only allow alphanumeric, hyphens, underscores, dots
-    for _, c := range strings.TrimSuffix(name, ".git") {
-        if !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '-' && c != '_' && c != '.' {
-            return false
-        }
-    }
-    return true
+	if !strings.HasSuffix(name, ".git") {
+		return false
+	}
+	// only allow alphanumeric, hyphens, underscores, dots
+	for _, c := range strings.TrimSuffix(name, ".git") {
+		if !unicode.IsLetter(c) && !unicode.IsDigit(c) && c != '-' && c != '_' && c != '.' {
+			return false
+		}
+	}
+	return true
 }
 
 func initBareRepo(path string) error {

@@ -25,7 +25,7 @@ func main() {
 	}
 
 	log.Printf("listening on :%s, repos at %s", port, repoRoot)
-	if error := http.ListenAndServe(":"+port, srv.Handler()); error != nil {
-		log.Fatalf("failed to start server: %v", error)
+	if err := http.ListenAndServe(":"+port, srv.Handler()); err != nil {
+		log.Fatalf("failed to start server: %v", err)
 	}
 }

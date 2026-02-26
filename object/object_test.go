@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestSerializeDeserializeRoundtrip (t *testing.T) {
+func TestSerializeDeserializeRoundtrip(t *testing.T) {
 	obj := &Object{
 		Type: TypeBlob,
 		Data: []byte("hello\n"),
@@ -34,4 +34,3 @@ func TestSerializeDeserializeRoundtrip (t *testing.T) {
 		t.Errorf("Data mismatch: got %q, want %q", got.Data, obj.Data)
 	}
 }
-

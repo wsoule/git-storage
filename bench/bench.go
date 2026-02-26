@@ -1,11 +1,12 @@
 package bench
 
 import (
+	"crypto/rand"
 	"fmt"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
-	"crypto/rand"
 
 	"git.wyat.me/git-storage/object"
 	"git.wyat.me/git-storage/store"
@@ -23,16 +24,16 @@ var Sizes = []Size{
 }
 
 type OperationResult struct {
-	P50 time.Duration
-	P99 time.Duration
+	P50       time.Duration
+	P99       time.Duration
 	OpsPerSec float64
 }
 
 type SizeResult struct {
-	Size        Size
-	Put         OperationResult
-	Get         OperationResult
-	Exists      OperationResult
+	Size          Size
+	Put           OperationResult
+	Get           OperationResult
+	Exists        OperationResult
 	ConcurrentPut OperationResult
 }
 
@@ -51,13 +52,26 @@ const iterations = 100
 
 func randomData(size int) []byte {
 	data := make([]byte, size)
-	rand.Read(data)
+	if _, err := rand.Read(data); err != nil {
+		panic(fmt.Sprintf("crypto/rand: %v", err))
+	}
 	return data
+}
+
+// percentileStats sorts latencies and computes P50, P99, and ops/sec.
+func percentileStats(n int, latencies []time.Duration) OperationResult {
+	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
+	p50 := latencies[len(latencies)*50/100]
+	p99 := latencies[len(latencies)*99/100]
+	var total time.Duration
+	for _, l := range latencies {
+		total += l
+	}
+	return OperationResult{P50: p50, P99: p99, OpsPerSec: float64(n) / total.Seconds()}
 }
 
 func measure(n int, fn func() error) (OperationResult, error) {
 	latencies := make([]time.Duration, 0, n)
-
 	for range n {
 		start := time.Now()
 		if err := fn(); err != nil {
@@ -65,25 +79,7 @@ func measure(n int, fn func() error) (OperationResult, error) {
 		}
 		latencies = append(latencies, time.Since(start))
 	}
-
-	// sort for percentiles
-	for i := 0; i < len(latencies); i++ {
-		for j := i + 1; j < len(latencies); j++ {
-			if latencies[j] < latencies[i] {
-				latencies[i], latencies[j] = latencies[j], latencies[i]
-			}
-		}
-	}
-
-	p50 := latencies[len(latencies)*50/100]
-	p99 := latencies[len(latencies)*99/100]
-	total := time.Duration(0)
-	for _, l := range latencies {
-		total += l
-	}
-	opsPerSec := float64(n) / total.Seconds()
-
-	return OperationResult{P50: p50, P99: p99, OpsPerSec: opsPerSec}, nil
+	return percentileStats(n, latencies), nil
 }
 
 func measureConcurrent(n int, fn func() error) (OperationResult, error) {
@@ -117,24 +113,7 @@ func measureConcurrent(n int, fn func() error) (OperationResult, error) {
 		return OperationResult{}, err
 	}
 
-	// sort for percentiles
-	for i := range latencies {
-		for j := i + 1; j < len(latencies); j++ {
-			if latencies[j] < latencies[i] {
-				latencies[i], latencies[j] = latencies[j], latencies[i]
-			}
-		}
-	}
-
-	p50 := latencies[len(latencies)*50/100]
-	p99 := latencies[len(latencies)*99/100]
-	total := time.Duration(0)
-	for _, l := range latencies {
-		total += l
-	}
-	opsPerSec := float64(n) / total.Seconds()
-
-	return OperationResult{P50: p50, P99: p99, OpsPerSec: opsPerSec}, nil
+	return percentileStats(n, latencies), nil
 }
 
 func RunBackend(name string, s store.ObjectStore) BackendResult {
@@ -168,7 +147,7 @@ func RunBackend(name string, s store.ObjectStore) BackendResult {
 		}
 		sr.Put = putResult
 
-		// Get
+		// Get — cycle through pre-populated SHAs
 		i := 0
 		getResult, err := measure(iterations, func() error {
 			_, err := s.Get(shas[i%len(shas)])
@@ -181,7 +160,7 @@ func RunBackend(name string, s store.ObjectStore) BackendResult {
 		}
 		sr.Get = getResult
 
-		// Exists
+		// Exists — cycle through pre-populated SHAs
 		j := 0
 		existsResult, err := measure(iterations, func() error {
 			_, err := s.Exists(shas[j%len(shas)])
@@ -211,4 +190,3 @@ func RunBackend(name string, s store.ObjectStore) BackendResult {
 
 	return result
 }
-
