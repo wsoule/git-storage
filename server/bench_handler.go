@@ -29,7 +29,21 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	sendEvent := func(event string, data any) {
+		b, _ := json.Marshal(data)
+		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, b)
+		flusher.Flush()
+	}
 
 	run := bench.RunResult{Timestamp: time.Now()}
 
@@ -39,27 +53,33 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 
 	sqliteStore, err := sqlite.New(sqliteFile)
 	if err != nil {
-		http.Error(w, "failed to create sqlite store", http.StatusInternalServerError)
+		sendEvent("error", map[string]string{"message": "failed to create sqlite store"})
 		return
 	}
 	defer sqliteStore.Close()
-	run.Backends = append(run.Backends, bench.RunBackend("SQLite", sqliteStore))
+	sendEvent("progress", map[string]string{"backend": "SQLite", "status": "running"})
+	result := bench.RunBackend("SQLite", sqliteStore)
+	run.Backends = append(run.Backends, result)
+	sendEvent("backend", result)
 
 	// BadgerDB — temp dir
 	badgerDir, err := os.MkdirTemp("", "badger-bench-*")
 	if err != nil {
-		http.Error(w, "failed to create badger temp dir", http.StatusInternalServerError)
+		sendEvent("error", map[string]string{"message": "failed to create badger temp dir"})
 		return
 	}
 	defer os.RemoveAll(badgerDir)
 
 	badgerStore, err := badger.New(badgerDir)
 	if err != nil {
-		http.Error(w, "failed to create badger store", http.StatusInternalServerError)
+		sendEvent("error", map[string]string{"message": "failed to create badger store"})
 		return
 	}
 	defer badgerStore.Close()
-	run.Backends = append(run.Backends, bench.RunBackend("BadgerDB", badgerStore))
+	sendEvent("progress", map[string]string{"backend": "BadgerDB", "status": "running"})
+	result = bench.RunBackend("BadgerDB", badgerStore)
+	run.Backends = append(run.Backends, result)
+	sendEvent("backend", result)
 
 	minioEndpoint := os.Getenv("MINIO_ENDPOINT")
 	if minioEndpoint == "" {
@@ -92,7 +112,10 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 			true, // Railway buckets use SSL
 		)
 		if err == nil {
-			run.Backends = append(run.Backends, bench.RunBackend("MinIO/S3", minioStore))
+			sendEvent("progress", map[string]string{"backend": "MinIO/S3", "status": "running"})
+			result = bench.RunBackend("MinIO/S3", minioStore)
+			run.Backends = append(run.Backends, result)
+			sendEvent("backend", result)
 		}
 	}
 
@@ -100,7 +123,7 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 	history.results = append(history.results, run)
 	history.mu.Unlock()
 
-	json.NewEncoder(w).Encode(run)
+	sendEvent("done", run)
 }
 
 func (s *Server) handleBenchHistory(w http.ResponseWriter, r *http.Request) {
