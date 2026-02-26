@@ -27,12 +27,26 @@ func New(repoRoot string) (*Server, error) {
 }
 
 func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/bench/run", s.handleBenchRun)
-	mux.HandleFunc("/bench/history", s.handleBenchHistory)
-	mux.HandleFunc("/bench", s.handleBenchUI)
-	mux.HandleFunc("/", s.handleGit)
-	return mux
+    mux := http.NewServeMux()
+    mux.HandleFunc("/bench/run", s.handleBenchRun)
+    mux.HandleFunc("/bench/history", s.handleBenchHistory)
+    mux.HandleFunc("/bench", s.handleBenchUI)
+    mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+    mux.HandleFunc("/", s.handleRoot)
+    return mux
+}
+
+func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
+    if r.URL.Path == "/" {
+        http.ServeFile(w, r, filepath.Join("static", "index.html"))
+        return
+    }
+    // everything else falls through to git
+    if !strings.Contains(r.URL.Path, ".git") {
+        http.NotFound(w, r)
+        return
+    }
+    s.handleGit(w, r)
 }
 
 func (s *Server) handleGit(w http.ResponseWriter, r *http.Request) {

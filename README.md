@@ -2,10 +2,9 @@
 
 A working git remote server in Go with swappable storage backends. Built to empirically reproduce the storage tradeoffs that teams hit when building git infrastructure for AI coding platforms.
 
-Clone and push real repositories to it (when running):
+Live at [git.wyat.me](https://git.wyat.me) — clone this repo:
 
-git clone http://localhost:8080/myrepo.git
-
+    git clone https://git.wyat.me/git-storage.git
 
 ## Why this exists
 

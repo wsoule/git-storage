@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>git-storage — swappable git object backends</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Berkeley+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:       #080c10;
+      --surface:  #0d1318;
+      --border:   #1a2330;
+      --muted:    #3d5166;
+      --dim:      #7a96b0;
+      --text:     #c8dae8;
+      --bright:   #e8f4ff;
+      --sqlite:   #e05c4a;
+      --badger:   #4aa8e0;
+      --minio:    #4ae08a;
+      --accent:   #4aa8e0;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* grid overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 48px 48px;
+      opacity: 0.35;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    /* NAV */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid var(--border);
+      background: rgba(8, 12, 16, 0.85);
+      backdrop-filter: blur(12px);
+    }
+
+    nav .wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+    }
+
+    .nav-logo {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--bright);
+      letter-spacing: 0.05em;
+    }
+
+    .nav-logo span { color: var(--accent); }
+
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-size: 0.8rem;
+      color: var(--dim);
+      text-decoration: none;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover { color: var(--bright); }
+
+    /* HERO */
+    .hero {
+      padding: 7rem 0 5rem;
+      position: relative;
+    }
+
+    .hero-label {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--accent);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .hero-label::before {
+      content: '';
+      display: block;
+      width: 24px;
+      height: 1px;
+      background: var(--accent);
+    }
+
+    h1 {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 700;
+      color: var(--bright);
+      line-height: 1.1;
+      margin-bottom: 1.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    .hero-sub {
+      font-size: 1.05rem;
+      color: var(--dim);
+      max-width: 560px;
+      line-height: 1.7;
+      margin-bottom: 2.5rem;
+      font-weight: 300;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .btn {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.8rem;
+      letter-spacing: 0.05em;
+      padding: 0.65rem 1.5rem;
+      border-radius: 4px;
+      text-decoration: none;
+      transition: all 0.15s;
+      border: 1px solid transparent;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+      font-weight: 700;
+    }
+
+    .btn-primary:hover { background: #6bbde8; }
+
+    .btn-ghost {
+      border-color: var(--border);
+      color: var(--dim);
+    }
+
+    .btn-ghost:hover { border-color: var(--muted); color: var(--text); }
+
+    .clone-block {
+      margin-top: 2rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 1rem;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--dim);
+    }
+
+    .clone-block span { color: var(--muted); user-select: none; }
+    .clone-block code { color: var(--text); }
+
+    .copy-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-family: 'Berkeley Mono', monospace;
+      padding: 0.2rem 0.5rem;
+      border-radius: 3px;
+      transition: all 0.15s;
+    }
+
+    .copy-btn:hover { background: var(--border); color: var(--text); }
+
+    /* FINDINGS */
+    .section {
+      padding: 5rem 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .section-label {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+
+    .section-title {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 1.4rem;
+      color: var(--bright);
+      margin-bottom: 3rem;
+      font-weight: 700;
+    }
+
+    .findings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 3rem;
+    }
+
+    .finding {
+      background: var(--surface);
+      padding: 2rem;
+    }
+
+    .finding-stat {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+
+    .finding-label {
+      font-size: 0.8rem;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.75rem;
+    }
+
+    .finding-desc {
+      font-size: 0.875rem;
+      color: var(--text);
+      line-height: 1.6;
+      font-weight: 300;
+    }
+
+    /* CHART */
+    .chart-controls {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.75rem;
+      padding: 0.35rem 0.85rem;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--dim);
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.03em;
+    }
+
+    .chip.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(74, 168, 224, 0.08);
+    }
+
+    .chart-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 2rem;
+    }
+
+    .chart-wrap canvas { max-height: 320px; }
+
+    .legend {
+      display: flex;
+      gap: 2rem;
+      margin-top: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--dim);
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+    }
+
+    /* TABLE */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 2rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.8rem;
+    }
+
+    th {
+      padding: 0.75rem 1.25rem;
+      text-align: left;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.7rem;
+    }
+
+    td {
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid rgba(26, 35, 48, 0.5);
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.015); }
+
+    .op-name { color: var(--dim); }
+    .val-sqlite { color: var(--sqlite); }
+    .val-badger { color: var(--badger); }
+    .val-minio  { color: var(--minio); }
+    .winner { font-weight: 700; }
+
+    /* FOOTER */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2rem 0;
+      font-family: 'Berkeley Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    footer .wrap {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    footer a { color: var(--dim); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    /* ANIMATIONS */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .hero > * {
+      animation: fadeUp 0.5s ease both;
+    }
+
+    .hero-label    { animation-delay: 0.05s; }
+    h1             { animation-delay: 0.1s; }
+    .hero-sub      { animation-delay: 0.15s; }
+    .hero-actions  { animation-delay: 0.2s; }
+    .clone-block   { animation-delay: 0.25s; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="nav-logo">git<span>-</span>storage</div>
+    <ul class="nav-links">
+      <li><a href="#findings">Findings</a></li>
+      <li><a href="#benchmarks">Benchmarks</a></li>
+      <li><a href="/bench">Live Bench</a></li>
+      <li><a href="https://github.com/wsoule/git-storage">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="wrap">
+  <section class="hero">
+    <div class="hero-label">Portfolio project — git infrastructure</div>
+    <h1>Git object storage.<br><em>Three backends.</em><br>One verdict.</h1>
+    <p class="hero-sub">
+      A working git remote server in Go with swappable storage backends.
+      Built to empirically reproduce the tradeoffs teams hit when building
+      git infrastructure for AI coding platforms.
+    </p>
+    <div class="hero-actions">
+      <a href="#benchmarks" class="btn btn-primary">See the numbers</a>
+      <a href="/bench" class="btn btn-ghost">Run live benchmark</a>
+    </div>
+    <div class="clone-block">
+      <span>$</span>
+      <code>git clone https://git.wyat.me/git-storage.git</code>
+      <button class="copy-btn" onclick="copy(this)">copy</button>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section class="section" id="findings">
+    <div class="section-label">Key findings</div>
+    <div class="section-title">The numbers are not subtle.</div>
+
+    <div class="findings-grid">
+      <div class="finding">
+        <div class="finding-stat">580×</div>
+        <div class="finding-label">Exists — BadgerDB vs MinIO/S3</div>
+        <div class="finding-desc">
+          Git calls Exists constantly during push to avoid resending objects.
+          BadgerDB handles 557k ops/sec. MinIO handles 951 — every check
+          is an HTTP round trip regardless of object size.
+        </div>
+      </div>
+      <div class="finding">
+        <div class="finding-stat">4.9×</div>
+        <div class="finding-label">Concurrent Put — BadgerDB vs SQLite (1KB)</div>
+        <div class="finding-desc">
+          Without WAL mode and a connection limit of 1, SQLite produces
+          SQLITE_BUSY errors under concurrent load. With those fixes,
+          BadgerDB still wins by nearly 5× at small object sizes.
+        </div>
+      </div>
+      <div class="finding">
+        <div class="finding-stat">≈1ms</div>
+        <div class="finding-label">MinIO floor — per request, any size</div>
+        <div class="finding-desc">
+          A 1KB Get on MinIO costs roughly the same as a 1MB Get.
+          The HTTP round trip is the bottleneck, not the data.
+          Git's workload is small objects. This is a bad fit.
+        </div>
+      </div>
+      <div class="finding">
+        <div class="finding-stat">~1×</div>
+        <div class="finding-label">Large object Put — all backends converge</div>
+        <div class="finding-desc">
+          At 1MB, SQLite (49), BadgerDB (52), and MinIO (47) are within
+          noise of each other. The bottleneck becomes I/O, not the
+          storage layer. Backend choice matters most at small sizes.
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section class="section" id="benchmarks">
+    <div class="section-label">Benchmark results</div>
+    <div class="section-title">ops/sec — higher is better</div>
+
+    <div class="chart-controls">
+      <div class="chip active" onclick="setOp('Put', this)">Put</div>
+      <div class="chip" onclick="setOp('Get', this)">Get</div>
+      <div class="chip" onclick="setOp('Exists', this)">Exists</div>
+      <div class="chip" onclick="setOp('ConcurrentPut', this)">Concurrent Put</div>
+    </div>
+
+    <div class="chart-wrap">
+      <canvas id="mainChart"></canvas>
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--sqlite)"></div>SQLite
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--badger)"></div>BadgerDB
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--minio)"></div>MinIO/S3
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Operation</th>
+            <th>Size</th>
+            <th>SQLite</th>
+            <th>BadgerDB</th>
+            <th>MinIO/S3</th>
+          </tr>
+        </thead>
+        <tbody id="resultsTable"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>git-storage — wyat soule</span>
+    <div style="display:flex;gap:1.5rem">
+      <a href="https://github.com/wsoule/git-storage">github</a>
+      <a href="/bench">live benchmark</a>
+      <a href="https://git.wyat.me/git-storage.git">clone</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // benchmark data from our run
+  const data = {
+    Put: {
+      labels: ['1KB', '100KB', '1MB'],
+      SQLite:   [4408,  443,   49],
+      BadgerDB: [6245,  543,   52],
+      MinIO:    [807,   304,   47],
+    },
+    Get: {
+      labels: ['1KB', '100KB', '1MB'],
+      SQLite:   [33020, 3253,  362],
+      BadgerDB: [148481,8172,  1314],
+      MinIO:    [820,   496,   119],
+    },
+    Exists: {
+      labels: ['1KB', '100KB', '1MB'],
+      SQLite:   [50606,  53469, 54102],
+      BadgerDB: [557842, 62803, 594703],
+      MinIO:    [951,    922,   932],
+    },
+    ConcurrentPut: {
+      labels: ['1KB', '100KB', '1MB'],
+      SQLite:   [182,  52,  6],
+      BadgerDB: [886,  215, 22],
+      MinIO:    [79,   15,  4],
+    },
+  }
+
+  const tableData = [
+    ['Put',            '1KB',   4408,   6245,   807],
+    ['Put',            '100KB', 443,    543,    304],
+    ['Put',            '1MB',   49,     52,     47],
+    ['Get',            '1KB',   33020,  148481, 820],
+    ['Get',            '100KB', 3253,   8172,   496],
+    ['Get',            '1MB',   362,    1314,   119],
+    ['Exists',         '1KB',   50606,  557842, 951],
+    ['Exists',         '100KB', 53469,  62803,  922],
+    ['Exists',         '1MB',   54102,  594703, 932],
+    ['Concurrent Put', '1KB',   182,    886,    79],
+    ['Concurrent Put', '100KB', 52,     215,    15],
+    ['Concurrent Put', '1MB',   6,      22,     4],
+  ]
+
+  let chart = null
+
+  function fmt(n) {
+    if (n >= 1000) return (n/1000).toFixed(1) + 'k'
+    return n.toString()
+  }
+
+  function setOp(op, el) {
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'))
+    el.classList.add('active')
+    renderChart(op)
+  }
+
+  function renderChart(op) {
+    const d = data[op]
+    if (chart) chart.destroy()
+    const ctx = document.getElementById('mainChart').getContext('2d')
+    chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: d.labels,
+        datasets: [
+          { label: 'SQLite',   data: d.SQLite,   backgroundColor: '#e05c4a', borderRadius: 3 },
+          { label: 'BadgerDB', data: d.BadgerDB, backgroundColor: '#4aa8e0', borderRadius: 3 },
+          { label: 'MinIO/S3', data: d.MinIO,    backgroundColor: '#4ae08a', borderRadius: 3 },
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0d1318',
+            borderColor: '#1a2330',
+            borderWidth: 1,
+            titleColor: '#c8dae8',
+            bodyColor: '#7a96b0',
+            titleFont: { family: 'Berkeley Mono' },
+            bodyFont: { family: 'Berkeley Mono' },
+            callbacks: {
+              label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)} ops/sec`
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#7a96b0', font: { family: 'Berkeley Mono', size: 11 } },
+            grid: { color: '#1a2330' }
+          },
+          y: {
+            ticks: { color: '#7a96b0', font: { family: 'Berkeley Mono', size: 11 },
+              callback: v => fmt(v)
+            },
+            grid: { color: '#1a2330' }
+          }
+        }
+      }
+    })
+  }
+
+  function buildTable() {
+    const tbody = document.getElementById('resultsTable')
+    tableData.forEach(([op, size, sq, bg, mn]) => {
+      const max = Math.max(sq, bg, mn)
+      const tr = document.createElement('tr')
+      tr.innerHTML = `
+        <td class="op-name">${op}</td>
+        <td style="color:var(--muted)">${size}</td>
+        <td class="val-sqlite ${sq===max?'winner':''}">${fmt(sq)}</td>
+        <td class="val-badger ${bg===max?'winner':''}">${fmt(bg)}</td>
+        <td class="val-minio  ${mn===max?'winner':''}">${fmt(mn)}</td>
+      `
+      tbody.appendChild(tr)
+    })
+  }
+
+  function copy(btn) {
+    navigator.clipboard.writeText('git clone https://git.wyat.me/git-storage.git')
+    btn.textContent = 'copied'
+    setTimeout(() => btn.textContent = 'copy', 2000)
+  }
+
+  renderChart('Put')
+  buildTable()
+</script>
+</body>
+</html>
