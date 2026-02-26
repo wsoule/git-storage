@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -31,8 +32,11 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 
 	run := bench.RunResult{Timestamp: time.Now()}
 
-	// SQLite — in-memory for benchmarks
-	sqliteStore, err := sqlite.New(":memory:")
+	// SQLite — temp file for benchmarks
+	sqliteFile := filepath.Join(os.TempDir(), fmt.Sprintf("sqlite-bench-%d.db", time.Now().UnixNano()))
+	defer os.Remove(sqliteFile)
+
+	sqliteStore, err := sqlite.New(sqliteFile)
 	if err != nil {
 		http.Error(w, "failed to create sqlite store", http.StatusInternalServerError)
 		return
