@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -64,6 +65,10 @@ func (s *Server) handleBenchRun(w http.ResponseWriter, r *http.Request) {
 	if minioEndpoint == "" {
 		minioEndpoint = os.Getenv("ENDPOINT")
 	}
+
+	log.Printf("minio endpoint: %q", minioEndpoint)
+	log.Printf("bucket: %q", os.Getenv("BUCKET"))
+
 	accessKey := os.Getenv("MINIO_ACCESS_KEY")
 	if accessKey == "" {
 		accessKey = os.Getenv("ACCESS_KEY_ID")
