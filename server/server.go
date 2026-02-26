@@ -28,6 +28,9 @@ func New(repoRoot string) (*Server, error) {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/bench/run", s.handleBenchRun)
+	mux.HandleFunc("/bench/history", s.handleBenchHistory)
+	mux.HandleFunc("/bench", s.handleBenchUI)
 	mux.HandleFunc("/", s.handleGit)
 	return mux
 }
